@@ -4,14 +4,35 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 import boto3
+from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
 
 if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
 
+from hf_cache_sync import __version__
 from hf_cache_sync.config import AppConfig
+
+B2_USER_AGENT = "b2ai-hfcache"
+DEFAULT_USER_AGENT = "hf-cache-sync"
+
+
+def _is_backblaze_endpoint(endpoint: str) -> bool:
+    """Check if the endpoint is a Backblaze B2 S3-compatible endpoint."""
+    if not endpoint:
+        return False
+    host = urlparse(endpoint).hostname or ""
+    return "backblazeb2.com" in host
+
+
+def get_user_agent(endpoint: str) -> str:
+    """Return the appropriate user-agent string for the storage endpoint."""
+    if _is_backblaze_endpoint(endpoint):
+        return f"{B2_USER_AGENT}/{__version__}"
+    return f"{DEFAULT_USER_AGENT}/{__version__}"
 
 
 class StorageBackend:
@@ -24,9 +45,12 @@ class StorageBackend:
     @property
     def client(self) -> S3Client:
         if self._client is None:
+            user_agent = get_user_agent(self.config.storage.endpoint)
+            boto_config = BotoConfig(user_agent_extra=user_agent)
             kwargs: dict = {
                 "service_name": "s3",
                 "region_name": self.config.storage.region or None,
+                "config": boto_config,
             }
             if self.config.storage.endpoint:
                 kwargs["endpoint_url"] = self.config.storage.endpoint
