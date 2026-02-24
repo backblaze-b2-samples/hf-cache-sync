@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hf-cache-sync"
+version = "0.1.0"
+description = "Shared Hugging Face Cache Manager with S3 Backend and LRU Eviction"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [{ name = "hf-cache-sync contributors" }]
+keywords = [
+    "huggingface",
+    "cache",
+    "s3",
+    "lru",
+    "shared-cache",
+    "machine-learning",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "boto3>=1.28",
+    "click>=8.0",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "moto[s3]>=4.0",
+]
+
+[project.scripts]
+hf-cache-sync = "hf_cache_sync.cli:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hf_cache_sync"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
