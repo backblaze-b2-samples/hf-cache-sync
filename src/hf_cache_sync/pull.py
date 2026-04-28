@@ -8,14 +8,13 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from botocore.exceptions import ClientError
 from rich.console import Console
 from rich.progress import Progress
 
 from hf_cache_sync.cache import is_likely_gated, repo_id_to_dirname, sha256_file
 from hf_cache_sync.config import AppConfig
 from hf_cache_sync.manifest import Manifest, manifest_key, ref_key
-from hf_cache_sync.storage import StorageBackend, is_not_found
+from hf_cache_sync.storage import NOT_FOUND_CODES, StorageBackend, StorageError
 
 console = Console()
 log = logging.getLogger(__name__)
@@ -33,12 +32,42 @@ def pull(
     *,
     dry_run: bool = False,
     workers: int = 8,
+    fallback: str | None = None,
 ) -> None:
     """Pull a repo from remote storage into local HF cache.
 
-    Raises PullError on remote/auth/manifest errors; the CLI converts that into
-    a non-zero exit code.
+    Raises PullError / StorageError on remote / manifest errors. The CLI
+    converts those into a non-zero exit code unless ``fallback="hf-hub"`` is
+    set, in which case the call is retried against ``huggingface_hub`` for
+    transient or "missing in remote" failures (auth errors still surface).
     """
+    try:
+        _pull_native(config, repo_id, revision, repo_type, dry_run=dry_run, workers=workers)
+    except (StorageError, PullError) as e:
+        if fallback != "hf-hub" or dry_run:
+            raise
+        # Auth/permission errors are config bugs — never paper over them.
+        if isinstance(e, StorageError) and e.auth_failure:
+            raise
+        from hf_cache_sync.fallback import pull_via_hf_hub, should_fallback
+
+        # StorageError must be transient; PullError ("not found", "hash mismatch",
+        # etc.) is always allowed since the user explicitly opted into fallback.
+        if isinstance(e, StorageError) and not should_fallback(e):
+            raise
+        log.warning("primary pull failed (%s); falling back to hf-hub", e)
+        pull_via_hf_hub(config, repo_id, revision, repo_type)
+
+
+def _pull_native(
+    config: AppConfig,
+    repo_id: str,
+    revision: str | None,
+    repo_type: str,
+    *,
+    dry_run: bool,
+    workers: int,
+) -> None:
     backend = StorageBackend(config)
     resolved_from_ref = False
 
@@ -145,6 +174,7 @@ def pull_all(
     include: list[str] | None = None,
     exclude: list[str] | None = None,
     workers: int = 8,
+    fallback: str | None = None,
 ) -> None:
     """Pull every repo whose ``refs/main`` is present in remote storage.
 
@@ -188,7 +218,14 @@ def pull_all(
     for repo_id in repos:
         console.print(f"Pulling {repo_id} ...")
         try:
-            pull(config, repo_id, revision=None, dry_run=dry_run, workers=workers)
+            pull(
+                config,
+                repo_id,
+                revision=None,
+                dry_run=dry_run,
+                workers=workers,
+                fallback=fallback,
+            )
         except PullError as e:
             console.print(f"[red]  {e}[/red]")
 
@@ -221,16 +258,16 @@ def _download_and_verify_blob(backend: StorageBackend, blob_hash: str, blob_path
 
 
 def _resolve_ref(backend: StorageBackend, repo_id: str, ref: str) -> str | None:
-    """Return the commit hash recorded at ``refs/<repo>/<ref>``, or None if absent.
+    """Return the commit hash at ``refs/<repo>/<ref>``, or None if absent.
 
-    Re-raises ClientError for non-404 failures so credential / network errors
+    Auth / endpoint / 5xx errors are re-raised as ``StorageError`` so they
     aren't silently masked as "ref missing".
     """
     key = ref_key(repo_id, ref)
     try:
         return backend.download_bytes(key).decode().strip()
-    except ClientError as e:
-        if is_not_found(e):
+    except StorageError as e:
+        if e.code in NOT_FOUND_CODES:
             return None
         raise
 
@@ -239,8 +276,8 @@ def _fetch_manifest(backend: StorageBackend, repo_id: str, revision: str) -> Man
     key = manifest_key(repo_id, revision)
     try:
         data = backend.download_bytes(key)
-    except ClientError as e:
-        if is_not_found(e):
+    except StorageError as e:
+        if e.code in NOT_FOUND_CODES:
             return None
         raise
     return Manifest.from_json(data.decode())

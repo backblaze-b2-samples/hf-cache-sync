@@ -101,17 +101,37 @@ def push(ctx: click.Context, dry_run: bool, workers: int) -> None:
 @click.option(
     "--workers", type=int, default=8, show_default=True, help="Concurrent blob downloads."
 )
+@click.option(
+    "--fallback",
+    type=click.Choice(["hf-hub"]),
+    default=None,
+    help="On transient remote failure, fall back to huggingface_hub. "
+    "Auth errors still surface. Requires the [fallback] extra.",
+)
 @click.pass_context
 def pull(
-    ctx: click.Context, repo_id: str, revision: str | None, dry_run: bool, workers: int
+    ctx: click.Context,
+    repo_id: str,
+    revision: str | None,
+    dry_run: bool,
+    workers: int,
+    fallback: str | None,
 ) -> None:
     """Pull a repo from remote storage into local cache."""
     from hf_cache_sync.pull import PullError
     from hf_cache_sync.pull import pull as do_pull
+    from hf_cache_sync.storage import StorageError
 
     try:
-        do_pull(ctx.obj["config"], repo_id, revision, dry_run=dry_run, workers=workers)
-    except PullError as e:
+        do_pull(
+            ctx.obj["config"],
+            repo_id,
+            revision,
+            dry_run=dry_run,
+            workers=workers,
+            fallback=fallback,
+        )
+    except (PullError, StorageError) as e:
         raise click.ClickException(str(e)) from e
 
 
@@ -133,6 +153,12 @@ def pull(
 @click.option(
     "--workers", type=int, default=8, show_default=True, help="Concurrent blob downloads per repo."
 )
+@click.option(
+    "--fallback",
+    type=click.Choice(["hf-hub"]),
+    default=None,
+    help="On transient remote failure, fall back to huggingface_hub.",
+)
 @click.pass_context
 def pull_all(
     ctx: click.Context,
@@ -141,6 +167,7 @@ def pull_all(
     include_patterns: tuple[str, ...],
     exclude_patterns: tuple[str, ...],
     workers: int,
+    fallback: str | None,
 ) -> None:
     """Pull all available repos from remote storage."""
     from hf_cache_sync.pull import pull_all as do_pull_all
@@ -153,6 +180,7 @@ def pull_all(
             include=list(include_patterns) or None,
             exclude=list(exclude_patterns) or None,
             workers=workers,
+            fallback=fallback,
         )
     except Exception as e:
         raise click.ClickException(str(e)) from e
@@ -170,6 +198,43 @@ def prune(ctx: click.Context, max_gb: float | None, dry_run: bool) -> None:
         do_prune(ctx.obj["config"], max_gb, dry_run=dry_run)
     except Exception as e:
         raise click.ClickException(str(e)) from e
+
+
+@cli.command()
+@click.option(
+    "--debounce",
+    type=float,
+    default=30.0,
+    show_default=True,
+    help="Seconds of filesystem idleness before triggering a push.",
+)
+@click.option("--workers", type=int, default=8, show_default=True, help="Concurrent blob uploads.")
+@click.pass_context
+def watch(ctx: click.Context, debounce: float, workers: int) -> None:
+    """[experimental] Watch the local HF cache and auto-push new models.
+
+    Subscribes to atomic-rename events only and waits for filesystem idle
+    before pushing, to avoid uploading half-downloaded blobs. Holds a
+    .hf-cache-sync.lock at the cache root to serialize against manual
+    `push` invocations. Requires the [watch] extra.
+    """
+    from hf_cache_sync.watch import watch as do_watch
+
+    do_watch(ctx.obj["config"], debounce_seconds=debounce, workers=workers)
+
+
+@cli.command()
+@click.pass_context
+def doctor(ctx: click.Context) -> None:
+    """Run preflight checks: config, credentials, bucket access, cache dir.
+
+    Each check runs independently so you see the full picture (rather than
+    bailing on the first failure). Exits non-zero if any check fails.
+    """
+    from hf_cache_sync.doctor import doctor as do_doctor
+
+    if not do_doctor(ctx.obj["config"]):
+        raise click.exceptions.Exit(code=1)
 
 
 @cli.command()
@@ -192,12 +257,29 @@ def status(ctx: click.Context) -> None:
 
 
 @cli.command("list")
+@click.option(
+    "--remote",
+    "show_remote",
+    is_flag=True,
+    help="List repos available in remote storage instead of local cache. "
+    "Uses one ListObjectsV2 paginator (no manifest body downloads).",
+)
 @click.pass_context
-def list_repos(ctx: click.Context) -> None:
-    """List cached repos and revisions."""
+def list_repos(ctx: click.Context, show_remote: bool) -> None:
+    """List cached repos (local by default; --remote for the bucket)."""
     config = ctx.obj["config"]
-    repos = scan_cache(config.hf_cache_dir)
 
+    if show_remote:
+        from hf_cache_sync.diff import list_remote
+        from hf_cache_sync.storage import StorageError
+
+        try:
+            list_remote(config)
+        except StorageError as e:
+            raise click.ClickException(str(e)) from e
+        return
+
+    repos = scan_cache(config.hf_cache_dir)
     if not repos:
         console.print("[yellow]No cached repos found.[/yellow]")
         return
@@ -218,3 +300,16 @@ def list_repos(ctx: click.Context) -> None:
         )
 
     console.print(table)
+
+
+@cli.command()
+@click.pass_context
+def diff(ctx: click.Context) -> None:
+    """Show per-revision differences between local cache and remote bucket."""
+    from hf_cache_sync.diff import diff as do_diff
+    from hf_cache_sync.storage import StorageError
+
+    try:
+        do_diff(ctx.obj["config"])
+    except StorageError as e:
+        raise click.ClickException(str(e)) from e

@@ -1,0 +1,67 @@
+# Example: prewarm a Hugging Face cache from a Backblaze B2 bucket in CI.
+#
+# Drop this into .github/workflows/ in a repo that needs HF models at
+# training/inference time. The shared cache cuts cold-start download
+# time from ~15 minutes (HF hub) to ~30 seconds (regional B2 → runner).
+#
+# Required GitHub secrets:
+#   HF_CACHE_BUCKET            — name of the B2 bucket
+#   HF_CACHE_REGION            — bucket region (e.g. us-west-000)
+#   HF_CACHE_ENDPOINT          — S3 endpoint URL (https://s3.<region>.backblazeb2.com)
+#   HF_CACHE_ACCESS_KEY        — read-only B2 application key ID
+#   HF_CACHE_SECRET_KEY        — read-only B2 application key
+
+name: prewarm-hf-cache
+
+on:
+  workflow_call:
+    inputs:
+      models:
+        description: "Space-separated list of repo IDs to pull (e.g. mistralai/Mistral-7B-v0.1)"
+        type: string
+        required: true
+
+jobs:
+  prewarm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install hf-cache-sync (with fallback extra)
+        run: pip install "hf-cache-sync[fallback]"
+
+      # The cache survives across runs on the same self-hosted runner; on
+      # GitHub-hosted runners use actions/cache to persist ~/.cache/huggingface
+      # between jobs.
+      - name: Restore HF cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-${{ hashFiles('**/requirements*.txt') }}
+
+      - name: Write hf-cache-sync config
+        run: |
+          mkdir -p ~/.config
+          cat > ~/.hf-cache-sync.yaml <<EOF
+          storage:
+            endpoint: ${{ secrets.HF_CACHE_ENDPOINT }}
+            bucket: ${{ secrets.HF_CACHE_BUCKET }}
+            region: ${{ secrets.HF_CACHE_REGION }}
+            access_key: ${{ secrets.HF_CACHE_ACCESS_KEY }}
+            secret_key: ${{ secrets.HF_CACHE_SECRET_KEY }}
+          EOF
+
+      # Sanity check — fail fast if the bucket / creds are misconfigured.
+      - name: Doctor
+        run: hf-cache-sync doctor
+
+      # Pull each model. --fallback hf-hub means if the team hasn't pushed
+      # this model yet, CI still works (it pulls from HF hub directly).
+      # Auth errors against B2 still surface — they don't get masked.
+      - name: Pull models
+        run: |
+          for repo in ${{ inputs.models }}; do
+            hf-cache-sync pull "$repo" --fallback hf-hub --workers 16
+          done

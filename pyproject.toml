@@ -50,7 +50,14 @@ dev = [
     "mypy>=1.10",
     "boto3-stubs[s3]>=1.28",
     "types-PyYAML>=6.0",
+    "huggingface_hub>=0.20",
+    "watchdog>=3.0",
 ]
+# CI / disaster fallback: if remote storage is unreachable (network / 5xx),
+# `pull --fallback hf-hub` reaches into huggingface_hub.snapshot_download.
+fallback = ["huggingface_hub>=0.20"]
+# Long-running daemon that auto-pushes new blobs as the HF cache writes them.
+watch = ["watchdog>=3.0"]
 
 [project.urls]
 Homepage = "https://github.com/backblaze-b2-samples/hf-cache-sync"
@@ -96,3 +103,16 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 no_implicit_optional = true
 ignore_missing_imports = true
+# Don't recurse into third-party libraries — they may use language features
+# newer than our target Python version, which would break mypy's parser.
+follow_imports = "silent"
+exclude = [
+    # Local dev envs sometimes have torch installed (not a project dep).
+    # mypy follows references into torch and trips on Python 3.10+ syntax.
+    '(^|/)torch/',
+]
+
+[[tool.mypy.overrides]]
+module = ["torch", "torch.*", "huggingface_hub", "huggingface_hub.*", "watchdog", "watchdog.*"]
+ignore_errors = true
+follow_imports = "skip"

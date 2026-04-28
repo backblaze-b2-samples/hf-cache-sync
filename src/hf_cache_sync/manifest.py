@@ -15,12 +15,28 @@ def repo_to_safe_key(repo_id: str) -> str:
     return repo_id.replace("/", "__")
 
 
+def safe_key_to_repo(safe: str) -> str:
+    return safe.replace("__", "/")
+
+
 def manifest_key(repo_id: str, revision: str) -> str:
     return f"manifests/{repo_to_safe_key(repo_id)}@{revision}.json"
 
 
 def ref_key(repo_id: str, ref_name: str) -> str:
     return f"refs/{repo_to_safe_key(repo_id)}/{ref_name}"
+
+
+def parse_manifest_key(key: str) -> tuple[str, str] | None:
+    """Inverse of :func:`manifest_key`. Returns ``(repo_id, revision)`` or None
+    if the key is not a manifest key in our expected format."""
+    if not key.startswith("manifests/") or not key.endswith(".json"):
+        return None
+    body = key[len("manifests/") : -len(".json")]
+    if "@" not in body:
+        return None
+    safe, _, revision = body.partition("@")
+    return safe_key_to_repo(safe), revision
 
 
 @dataclass

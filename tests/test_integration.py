@@ -484,6 +484,23 @@ class TestPrune:
         assert (blobs_dir / used_hash).exists()
 
 
+# ── Storage Error Wrapping ──────────────────────────────────────────
+
+
+class TestStorageErrors:
+    def test_pull_surfaces_storage_error_on_missing_bucket(self, config):
+        """Bucket-level errors must come through humanized, not as raw boto."""
+        from hf_cache_sync.pull import pull
+        from hf_cache_sync.storage import StorageError
+
+        config.storage.bucket = "definitely-not-this-bucket"
+        with mock_aws():
+            with pytest.raises(StorageError) as excinfo:
+                pull(config, "org/whatever", "rev1")
+            msg = str(excinfo.value).lower()
+            assert "bucket" in msg or "not found" in msg
+
+
 # ── Team Prefix Tests ───────────────────────────────────────────────
 
 

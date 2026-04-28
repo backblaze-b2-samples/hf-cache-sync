@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `doctor` command — preflight checks for config, credentials, bucket reachability, read/write permission, and HF cache dir presence. Each check runs independently and prints a ✓/✗ summary; non-zero exit on any failure.
+- `diff` command — per-revision comparison of local cache vs remote bucket (in-sync / local-only / remote-only).
+- `list --remote` flag — list repos available in remote storage (single paginator, no manifest body downloads).
+- `watch` command [experimental] — daemon that auto-pushes new blobs when the HF cache writes them. Uses `watchdog`, subscribes to atomic-rename events only, idle-debounces, and holds a lock file at `<cache_dir>/.hf-cache-sync.lock` to serialize against manual `push`.
+- `pull --fallback hf-hub` — on transient remote failures (5xx, network), fall back to `huggingface_hub.snapshot_download`. Auth errors still surface.
+- Optional extras: `[fallback]` (huggingface_hub), `[watch]` (watchdog).
+- `examples/github-action.yml` — copy-pasteable CI workflow for prewarming an HF cache.
 - `--workers` flag on `push` and `pull` for concurrent blob transfers (default 8).
 - `--dry-run` flag on `push`, `pull`, and `prune`.
 - `-v` / `--verbose` flag enables debug-level logging via stdlib `logging`.
@@ -27,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `pull` no longer swallows credential / network errors as "manifest not found"; `ClientError` is narrowed and surfaced.
 - Hash-mismatch on `pull` deletes only the corrupt blob, preserving content-addressed blobs that may be reused by other revisions.
+- Boto3 `ClientError` and `EndpointConnectionError` are now translated to a humanized `StorageError` with actionable hints (bad creds, wrong endpoint, missing bucket, region mismatch, transient outage) before they reach the user. The original error chain is preserved via `__cause__` for debugging.
+- `NoSuchBucket` is no longer treated as "key not found" — it now surfaces as a config error instead of being silently masked as "manifest not found".
 
 ## [0.1.0] - 2025-02-24
 

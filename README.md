@@ -160,23 +160,51 @@ Config file search order: `./.hf-cache-sync.yaml`, then `~/.hf-cache-sync.yaml`.
 
 ```bash
 hf-cache-sync init                        # Generate config template
+hf-cache-sync doctor                      # Verify config, creds, bucket, cache dir
 hf-cache-sync push                        # Upload cache to remote
 hf-cache-sync push --dry-run              # Preview without uploading
 hf-cache-sync push --workers 16           # Parallelize uploads (default 8)
 hf-cache-sync pull <repo_id>              # Hydrate a specific model
 hf-cache-sync pull <repo_id> -r <hash>    # Hydrate a specific revision
+hf-cache-sync pull <repo_id> --fallback hf-hub  # Fall back to HF hub if remote is unreachable
 hf-cache-sync pull-all                    # Hydrate all remote models
 hf-cache-sync pull-all --include 'org/*'  # Filter by fnmatch glob
 hf-cache-sync pull-all --limit 5          # Cap the number of repos
 hf-cache-sync prune --max-gb 50           # Evict old revisions
 hf-cache-sync prune --dry-run             # Preview eviction
 hf-cache-sync status                      # Show cache size and config
-hf-cache-sync list                        # List cached repos
+hf-cache-sync list                        # List local cached repos
+hf-cache-sync list --remote               # List repos available in the bucket
+hf-cache-sync diff                        # Show local vs remote per revision
+hf-cache-sync watch                       # [experimental] auto-push new blobs
 hf-cache-sync -v <command>                # Debug logging
 ```
 
 Failed commands (auth errors, missing manifests, hash mismatches) exit with a
-non-zero status so they can be detected in CI.
+non-zero status so they can be detected in CI. `pull --fallback hf-hub` retries
+through `huggingface_hub` on transient remote failures (it never papers over
+auth errors — those still surface).
+
+### Optional extras
+
+| Extra      | Adds                                       | Used by                  |
+|------------|--------------------------------------------|--------------------------|
+| `[fallback]` | `huggingface_hub`                        | `pull --fallback hf-hub` |
+| `[watch]`    | `watchdog`                               | `hf-cache-sync watch`    |
+| `[dev]`      | pytest, ruff, mypy, moto, type stubs     | local development        |
+
+```bash
+pip install "hf-cache-sync[fallback]"          # CI runners
+pip install "hf-cache-sync[watch]"             # workstations
+pip install "hf-cache-sync[fallback,watch]"    # both
+```
+
+### CI integration
+
+A ready-to-use GitHub Actions workflow lives at
+[`examples/github-action.yml`](examples/github-action.yml). It runs `doctor`
+to fail fast on misconfiguration and uses `--fallback hf-hub` so jobs survive
+B2 outages.
 
 ## Testing
 
