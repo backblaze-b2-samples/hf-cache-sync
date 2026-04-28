@@ -1,6 +1,11 @@
-"""Tests for storage backend user-agent logic."""
+"""Tests for storage backend user-agent and error handling."""
 
-from hf_cache_sync.storage import _is_backblaze_endpoint, get_user_agent, B2_USER_AGENT, DEFAULT_USER_AGENT
+from hf_cache_sync.storage import (
+    B2_USER_AGENT,
+    DEFAULT_USER_AGENT,
+    _is_backblaze_endpoint,
+    get_user_agent,
+)
 
 
 def test_is_backblaze_endpoint():

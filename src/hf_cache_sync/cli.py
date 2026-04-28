@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.logging import RichHandler
 from rich.table import Table
 
 from hf_cache_sync import __version__
@@ -16,21 +18,43 @@ console = Console()
 
 GB = 1 << 30
 
+# Use Click's standard help options on every command/group.
+CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
-@click.group()
+
+def _configure_logging(verbose: bool) -> None:
+    """Stream logs through Rich; -v lifts to DEBUG, otherwise WARNING."""
+    level = logging.DEBUG if verbose else logging.WARNING
+    logging.basicConfig(
+        level=level,
+        format="%(message)s",
+        datefmt="[%X]",
+        handlers=[RichHandler(console=console, rich_tracebacks=True, show_time=False)],
+        force=True,
+    )
+
+
+@click.group(context_settings=CONTEXT_SETTINGS)
 @click.version_option(__version__)
-@click.option("--config", "config_path", type=click.Path(exists=True, path_type=Path), default=None)
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Path to a config YAML. Defaults to ./.hf-cache-sync.yaml then ~/.hf-cache-sync.yaml.",
+)
+@click.option("-v", "--verbose", is_flag=True, help="Enable debug logging.")
 @click.pass_context
-def cli(ctx: click.Context, config_path: Path | None) -> None:
+def cli(ctx: click.Context, config_path: Path | None, verbose: bool) -> None:
     """hf-cache-sync: Shared Hugging Face Cache Manager."""
+    _configure_logging(verbose)
     ctx.ensure_object(dict)
     ctx.obj["config"] = load_config(config_path)
 
 
 @cli.command()
-@click.pass_context
-def init(ctx: click.Context) -> None:
-    """Initialize configuration file."""
+def init() -> None:
+    """Initialize configuration file in the current directory."""
     target = Path.cwd() / ".hf-cache-sync.yaml"
     if target.exists():
         console.print(f"[yellow]{target} already exists.[/yellow]")
@@ -57,38 +81,95 @@ team:
 
 
 @cli.command()
+@click.option("--dry-run", is_flag=True, help="Show what would be uploaded without writing.")
+@click.option("--workers", type=int, default=8, show_default=True, help="Concurrent blob uploads.")
 @click.pass_context
-def push(ctx: click.Context) -> None:
+def push(ctx: click.Context, dry_run: bool, workers: int) -> None:
     """Push local cache to remote storage."""
     from hf_cache_sync.push import push as do_push
-    do_push(ctx.obj["config"])
+
+    try:
+        do_push(ctx.obj["config"], dry_run=dry_run, workers=workers)
+    except Exception as e:
+        raise click.ClickException(str(e)) from e
 
 
 @cli.command()
 @click.argument("repo_id")
 @click.option("--revision", "-r", default=None, help="Specific revision hash.")
+@click.option("--dry-run", is_flag=True, help="Report what would be downloaded.")
+@click.option(
+    "--workers", type=int, default=8, show_default=True, help="Concurrent blob downloads."
+)
 @click.pass_context
-def pull(ctx: click.Context, repo_id: str, revision: str | None) -> None:
+def pull(
+    ctx: click.Context, repo_id: str, revision: str | None, dry_run: bool, workers: int
+) -> None:
     """Pull a repo from remote storage into local cache."""
+    from hf_cache_sync.pull import PullError
     from hf_cache_sync.pull import pull as do_pull
-    do_pull(ctx.obj["config"], repo_id, revision)
+
+    try:
+        do_pull(ctx.obj["config"], repo_id, revision, dry_run=dry_run, workers=workers)
+    except PullError as e:
+        raise click.ClickException(str(e)) from e
 
 
 @cli.command("pull-all")
+@click.option("--dry-run", is_flag=True, help="Report what would be downloaded.")
+@click.option("--limit", type=int, default=None, help="Pull at most N repos.")
+@click.option(
+    "--include",
+    "include_patterns",
+    multiple=True,
+    help="fnmatch glob to include (repeatable). Defaults to all.",
+)
+@click.option(
+    "--exclude",
+    "exclude_patterns",
+    multiple=True,
+    help="fnmatch glob to exclude (repeatable).",
+)
+@click.option(
+    "--workers", type=int, default=8, show_default=True, help="Concurrent blob downloads per repo."
+)
 @click.pass_context
-def pull_all(ctx: click.Context) -> None:
+def pull_all(
+    ctx: click.Context,
+    dry_run: bool,
+    limit: int | None,
+    include_patterns: tuple[str, ...],
+    exclude_patterns: tuple[str, ...],
+    workers: int,
+) -> None:
     """Pull all available repos from remote storage."""
     from hf_cache_sync.pull import pull_all as do_pull_all
-    do_pull_all(ctx.obj["config"])
+
+    try:
+        do_pull_all(
+            ctx.obj["config"],
+            dry_run=dry_run,
+            limit=limit,
+            include=list(include_patterns) or None,
+            exclude=list(exclude_patterns) or None,
+            workers=workers,
+        )
+    except Exception as e:
+        raise click.ClickException(str(e)) from e
 
 
 @cli.command()
 @click.option("--max-gb", type=float, default=None, help="Max local cache size in GB.")
+@click.option("--dry-run", is_flag=True, help="Report what would be evicted.")
 @click.pass_context
-def prune(ctx: click.Context, max_gb: float | None) -> None:
+def prune(ctx: click.Context, max_gb: float | None, dry_run: bool) -> None:
     """Evict least-recently-used revisions to stay within disk budget."""
     from hf_cache_sync.prune import prune as do_prune
-    do_prune(ctx.obj["config"], max_gb)
+
+    try:
+        do_prune(ctx.obj["config"], max_gb, dry_run=dry_run)
+    except Exception as e:
+        raise click.ClickException(str(e)) from e
 
 
 @cli.command()

@@ -14,16 +14,25 @@ keywords = [
     "huggingface",
     "cache",
     "s3",
+    "backblaze",
     "lru",
     "shared-cache",
     "machine-learning",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "Environment :: Console",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Archiving :: Mirroring",
 ]
 dependencies = [
     "boto3>=1.28",
@@ -37,7 +46,17 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "moto[s3]>=4.0",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "boto3-stubs[s3]>=1.28",
+    "types-PyYAML>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/backblaze-b2-samples/hf-cache-sync"
+Source = "https://github.com/backblaze-b2-samples/hf-cache-sync"
+Issues = "https://github.com/backblaze-b2-samples/hf-cache-sync/issues"
+Changelog = "https://github.com/backblaze-b2-samples/hf-cache-sync/blob/main/CHANGELOG.md"
 
 [project.scripts]
 hf-cache-sync = "hf_cache_sync.cli:cli"
@@ -47,3 +66,33 @@ packages = ["src/hf_cache_sync"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",  # line length (handled by formatter; long error strings ok)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]  # asserts in tests are fine
+
+[tool.mypy]
+python_version = "3.9"
+strict_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+ignore_missing_imports = true

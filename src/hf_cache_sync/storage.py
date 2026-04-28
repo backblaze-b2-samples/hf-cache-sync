@@ -19,6 +19,9 @@ from hf_cache_sync.config import AppConfig
 B2_USER_AGENT = "b2ai-hfcache"
 DEFAULT_USER_AGENT = "hf-cache-sync"
 
+# S3 / B2 codes that mean "the object does not exist" rather than a real failure.
+NOT_FOUND_CODES = {"404", "NoSuchKey", "NoSuchBucket"}
+
 
 def _is_backblaze_endpoint(endpoint: str) -> bool:
     """Check if the endpoint is a Backblaze B2 S3-compatible endpoint."""
@@ -35,6 +38,12 @@ def get_user_agent(endpoint: str) -> str:
     return f"{DEFAULT_USER_AGENT}/{__version__}"
 
 
+def is_not_found(err: ClientError) -> bool:
+    """True iff the ClientError is a 404 / NoSuchKey class of error."""
+    code = err.response.get("Error", {}).get("Code", "")
+    return code in NOT_FOUND_CODES
+
+
 class StorageBackend:
     def __init__(self, config: AppConfig):
         self.config = config
@@ -46,7 +55,11 @@ class StorageBackend:
     def client(self) -> S3Client:
         if self._client is None:
             user_agent = get_user_agent(self.config.storage.endpoint)
-            boto_config = BotoConfig(user_agent_extra=user_agent)
+            boto_config = BotoConfig(
+                user_agent_extra=user_agent,
+                # Standard mode covers throttling + transient 5xx with sensible backoff.
+                retries={"max_attempts": 5, "mode": "standard"},
+            )
             kwargs: dict = {
                 "service_name": "s3",
                 "region_name": self.config.storage.region or None,
@@ -68,8 +81,10 @@ class StorageBackend:
         try:
             self.client.head_object(Bucket=self.bucket, Key=self._key(key))
             return True
-        except ClientError:
-            return False
+        except ClientError as e:
+            if is_not_found(e):
+                return False
+            raise
 
     def upload_file(self, local_path: Path, key: str) -> None:
         self.client.upload_file(str(local_path), self.bucket, self._key(key))
@@ -93,6 +108,6 @@ class StorageBackend:
             for obj in page.get("Contents", []):
                 k = obj["Key"]
                 if self.prefix and k.startswith(self.prefix):
-                    k = k[len(self.prefix):]
+                    k = k[len(self.prefix) :]
                 keys.append(k)
         return keys

@@ -9,14 +9,20 @@ from pathlib import Path
 import yaml
 
 
-DEFAULT_CONFIG_PATHS = [
-    Path.cwd() / ".hf-cache-sync.yaml",
-    Path.home() / ".hf-cache-sync.yaml",
-]
+def _default_hf_cache_dir() -> Path:
+    """Resolve the default HF hub cache dir, respecting HF env vars."""
+    if hub_cache := os.environ.get("HF_HUB_CACHE"):
+        return Path(hub_cache)
+    hf_home = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface"))
+    return hf_home / "hub"
 
-DEFAULT_HF_CACHE_DIR = Path(
-    os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface")
-) / "hub"
+
+def _default_config_paths() -> list[Path]:
+    """Config search paths, evaluated at call time (not import time)."""
+    return [
+        Path.cwd() / ".hf-cache-sync.yaml",
+        Path.home() / ".hf-cache-sync.yaml",
+    ]
 
 
 @dataclass
@@ -51,7 +57,7 @@ class AppConfig:
     def hf_cache_dir(self) -> Path:
         if self.cache.hf_cache_dir:
             return Path(self.cache.hf_cache_dir)
-        return DEFAULT_HF_CACHE_DIR
+        return _default_hf_cache_dir()
 
     @property
     def remote_prefix(self) -> str:
@@ -62,7 +68,7 @@ def load_config(path: Path | None = None) -> AppConfig:
     """Load config from YAML file. Returns defaults if no file found."""
     if path and path.exists():
         return _parse_config(path)
-    for p in DEFAULT_CONFIG_PATHS:
+    for p in _default_config_paths():
         if p.exists():
             return _parse_config(p)
     return AppConfig()

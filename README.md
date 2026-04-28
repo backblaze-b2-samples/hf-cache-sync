@@ -161,20 +161,38 @@ Config file search order: `./.hf-cache-sync.yaml`, then `~/.hf-cache-sync.yaml`.
 ```bash
 hf-cache-sync init                        # Generate config template
 hf-cache-sync push                        # Upload cache to remote
+hf-cache-sync push --dry-run              # Preview without uploading
+hf-cache-sync push --workers 16           # Parallelize uploads (default 8)
 hf-cache-sync pull <repo_id>              # Hydrate a specific model
 hf-cache-sync pull <repo_id> -r <hash>    # Hydrate a specific revision
 hf-cache-sync pull-all                    # Hydrate all remote models
+hf-cache-sync pull-all --include 'org/*'  # Filter by fnmatch glob
+hf-cache-sync pull-all --limit 5          # Cap the number of repos
 hf-cache-sync prune --max-gb 50           # Evict old revisions
+hf-cache-sync prune --dry-run             # Preview eviction
 hf-cache-sync status                      # Show cache size and config
 hf-cache-sync list                        # List cached repos
+hf-cache-sync -v <command>                # Debug logging
 ```
+
+Failed commands (auth errors, missing manifests, hash mismatches) exit with a
+non-zero status so they can be detected in CI.
 
 ## Testing
 
 ```bash
 pip install -e ".[dev]"
-pytest
+pytest                  # 60+ tests, ~90% coverage
+ruff check .            # lint
+ruff format --check .   # format check
+mypy src                # type check
 ```
+
+CI runs the full matrix on Python 3.9–3.13 against every PR.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and small features are welcome.
 
 ## Troubleshooting
 
@@ -188,10 +206,19 @@ pytest
 
 ## Security
 
-- Only public models are synced by default. Gated models require `allow_gated: true`.
-- All blobs are hash-verified (SHA-256) on pull.
-- Use B2 application keys scoped to a single bucket. Create separate read-only keys for distribution.
-- Never commit `.hf-cache-sync.yaml` with credentials. Use environment variables in CI.
+- Gated-license models are skipped by default via a best-effort heuristic
+  (LICENSE / USE_POLICY content is scanned for keywords like "agreement",
+  "you must accept"). The check is **not** a substitute for honoring license
+  terms — review what your bucket contains before sharing access. Override
+  with `allow_gated: true` if you have the rights.
+- All sha256-named blobs are hash-verified on pull. Downloads land in a
+  `.tmp` file and are renamed atomically only after verification, so an
+  interrupted pull can never leave a corrupt blob behind.
+- Use B2 application keys scoped to a single bucket. Create separate read-only
+  keys for distribution; restrict write keys to CI runners.
+- Never commit `.hf-cache-sync.yaml` with credentials — `.gitignore` excludes
+  it by default. Prefer `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` env vars
+  in CI.
 
 ## License
 
