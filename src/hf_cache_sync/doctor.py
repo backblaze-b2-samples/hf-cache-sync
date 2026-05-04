@@ -47,16 +47,11 @@ def run_checks(config: AppConfig) -> list[CheckResult]:
     results.append(_check_hf_cache_dir(config))
 
     # Network-bound checks share a backend; only run them when we have enough
-    # config to make the attempt meaningful.
-    can_reach_storage = bool(config.storage.bucket)
-    if can_reach_storage:
-        backend = StorageBackend(config)
-        bucket_check = _check_bucket_reachable(backend)
-        results.append(bucket_check)
-        if bucket_check.ok:
-            results.append(_check_read_permission(backend))
-            results.append(_check_write_permission(backend))
-    else:
+    # config to make the attempt meaningful. Without credentials boto raises
+    # NoCredentialsError, which would crash the run; the credentials row above
+    # has already surfaced the failure, so skip the network probes too.
+    has_creds = config.storage.credentials_source != CRED_SOURCE_NONE
+    if not config.storage.bucket:
         results.append(
             CheckResult(
                 name="Bucket reachable",
@@ -65,6 +60,22 @@ def run_checks(config: AppConfig) -> list[CheckResult]:
                 hint="Set storage.bucket in YAML, export B2_BUCKET, or run `hf-cache-sync init`.",
             )
         )
+    elif not has_creds:
+        results.append(
+            CheckResult(
+                name="Bucket reachable",
+                ok=False,
+                detail="Skipped — credentials are not configured.",
+                hint="Set credentials in YAML or export B2_APPLICATION_KEY_ID/B2_APPLICATION_KEY.",
+            )
+        )
+    else:
+        backend = StorageBackend(config)
+        bucket_check = _check_bucket_reachable(backend)
+        results.append(bucket_check)
+        if bucket_check.ok:
+            results.append(_check_read_permission(backend))
+            results.append(_check_write_permission(backend))
 
     return results
 

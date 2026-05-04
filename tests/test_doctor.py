@@ -99,14 +99,30 @@ def _yaml_with(tmp_path, **storage):
 
 
 def test_doctor_missing_credentials(tmp_path, monkeypatch):
+    """No creds anywhere — must NOT crash trying to head_bucket.
+
+    Regression guard: in CI (no ~/.aws/credentials, no IAM role), running
+    head_bucket without credentials raises boto's NoCredentialsError. Doctor
+    must short-circuit network probes when source=none and report a clean
+    skip instead.
+    """
     from hf_cache_sync.config import load_config
 
     _clear_cred_env(monkeypatch)
+    # Also clear AWS shared-credentials discovery so this works on dev machines.
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", "/nonexistent")
+    monkeypatch.setenv("AWS_CONFIG_FILE", "/nonexistent")
     p = _yaml_with(tmp_path, bucket=BUCKET, region=REGION)
     config = load_config(p)
     results = run_checks(config)
     by_name = {r.name: r for r in results}
     assert by_name["Credentials configured"].ok is False
+    assert by_name["Bucket reachable"].ok is False
+    assert "Skipped" in by_name["Bucket reachable"].detail
+    assert "credentials" in by_name["Bucket reachable"].detail.lower()
+    # Read/Write probes must not run when no creds — would crash.
+    assert "Read permission" not in by_name
+    assert "Write permission" not in by_name
 
 
 def test_doctor_credentials_from_aws_env(tmp_path, monkeypatch):

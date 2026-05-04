@@ -10,7 +10,12 @@ from urllib.parse import urlparse
 
 import boto3
 from botocore.config import Config as BotoConfig
-from botocore.exceptions import ClientError, EndpointConnectionError
+from botocore.exceptions import (
+    ClientError,
+    EndpointConnectionError,
+    NoCredentialsError,
+    PartialCredentialsError,
+)
 
 if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
@@ -141,6 +146,22 @@ def _humanize_endpoint_error(err: EndpointConnectionError, *, endpoint: str) -> 
     return StorageError(msg, code="EndpointConnectionError", transient=True)
 
 
+def _humanize_no_credentials_error(err: Exception) -> StorageError:
+    """Wrap boto's NoCredentialsError / PartialCredentialsError as a StorageError.
+
+    Boto raises this when no credential source is available *anywhere* (config,
+    env, IAM, etc.). The credential check in ``doctor`` already surfaces this
+    explicitly, so the wrapper exists mainly to keep callers from crashing on
+    an unhandled exception type.
+    """
+    msg = (
+        "No credentials available. Set storage.access_key/secret_key in your "
+        "config OR export B2_APPLICATION_KEY_ID/B2_APPLICATION_KEY (or "
+        "AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY)."
+    )
+    return StorageError(msg, code="NoCredentialsError", auth_failure=True)
+
+
 @contextmanager
 def _wrap_errors(bucket: str, endpoint: str) -> Iterator[None]:
     """Translate boto3 errors raised within the block into StorageError."""
@@ -150,6 +171,8 @@ def _wrap_errors(bucket: str, endpoint: str) -> Iterator[None]:
         raise _humanize_client_error(e, bucket=bucket, endpoint=endpoint) from e
     except EndpointConnectionError as e:
         raise _humanize_endpoint_error(e, endpoint=endpoint) from e
+    except (NoCredentialsError, PartialCredentialsError) as e:
+        raise _humanize_no_credentials_error(e) from e
 
 
 class StorageBackend:
@@ -209,6 +232,8 @@ class StorageBackend:
             raise _humanize_client_error(e, bucket=self.bucket, endpoint=self.endpoint) from e
         except EndpointConnectionError as e:
             raise _humanize_endpoint_error(e, endpoint=self.endpoint) from e
+        except (NoCredentialsError, PartialCredentialsError) as e:
+            raise _humanize_no_credentials_error(e) from e
 
     def upload_file(self, local_path: Path, key: str) -> None:
         with _wrap_errors(self.bucket, self.endpoint):

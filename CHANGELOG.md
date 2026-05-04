@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `push` and `pull` now size the boto3 connection pool to the requested `--workers`. With the prior default of 10, a 16-worker pool spent time blocked on the connection pool and emitted urllib3 "Connection pool is full" warnings. The pool is floored at boto3's default of 10 so commands with low concurrency (`doctor`, `diff`) keep their existing behavior.
 
 ### Fixed
+- `doctor` no longer crashes with `NoCredentialsError` when run in an environment with zero credential sources (CI runners, fresh containers). The bucket-reachable / read / write probes now skip cleanly when `credentials_source == "none"` and report the failure on the credentials row only.
+- `StorageBackend` now translates `NoCredentialsError` and `PartialCredentialsError` into a humanized `StorageError` so any caller (not just `doctor`) gets an actionable message instead of an unhandled boto exception.
 - `pull` no longer swallows credential / network errors as "manifest not found"; `ClientError` is narrowed and surfaced.
 - Hash-mismatch on `pull` deletes only the corrupt blob, preserving content-addressed blobs that may be reused by other revisions.
 - Boto3 `ClientError` and `EndpointConnectionError` are now translated to a humanized `StorageError` with actionable hints (bad creds, wrong endpoint, missing bucket, region mismatch, transient outage) before they reach the user. The original error chain is preserved via `__cause__` for debugging.

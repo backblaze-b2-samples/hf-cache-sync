@@ -1,7 +1,12 @@
 """Tests for storage backend user-agent, error handling, and humanized errors."""
 
 import pytest
-from botocore.exceptions import ClientError, EndpointConnectionError
+from botocore.exceptions import (
+    ClientError,
+    EndpointConnectionError,
+    NoCredentialsError,
+    PartialCredentialsError,
+)
 
 from hf_cache_sync.config import AppConfig, StorageConfig
 from hf_cache_sync.storage import (
@@ -11,7 +16,9 @@ from hf_cache_sync.storage import (
     StorageError,
     _humanize_client_error,
     _humanize_endpoint_error,
+    _humanize_no_credentials_error,
     _is_backblaze_endpoint,
+    _wrap_errors,
     get_user_agent,
 )
 
@@ -87,6 +94,31 @@ def test_storage_error_chain_preserves_cause():
         raise _humanize_client_error(inner, bucket="b", endpoint="") from inner
     except StorageError as caught:
         assert caught.__cause__ is inner
+
+
+def test_humanize_no_credentials_error():
+    """NoCredentialsError must surface as an actionable auth StorageError."""
+    err = _humanize_no_credentials_error(NoCredentialsError())
+    assert isinstance(err, StorageError)
+    assert err.code == "NoCredentialsError"
+    assert err.auth_failure is True
+    assert "B2_APPLICATION_KEY_ID" in str(err)
+
+
+@pytest.mark.parametrize(
+    "exc_cls",
+    [NoCredentialsError, PartialCredentialsError],
+)
+def test_wrap_errors_translates_credential_errors(exc_cls):
+    """Crashes from boto's credential resolver must turn into StorageError."""
+    if exc_cls is PartialCredentialsError:
+        inner = exc_cls(provider="env", cred_var="AWS_SECRET_ACCESS_KEY")
+    else:
+        inner = exc_cls()
+    with pytest.raises(StorageError) as excinfo, _wrap_errors("b", "https://e"):
+        raise inner
+    assert excinfo.value.auth_failure is True
+    assert excinfo.value.__cause__ is inner
 
 
 def _backend(workers: int) -> StorageBackend:

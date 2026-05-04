@@ -1,5 +1,10 @@
 # hf-cache-sync — Hugging Face Cache Sync for Backblaze B2 & S3
 
+[![PyPI](https://img.shields.io/pypi/v/hf-cache-sync.svg)](https://pypi.org/project/hf-cache-sync/)
+[![Python](https://img.shields.io/pypi/pyversions/hf-cache-sync.svg)](https://pypi.org/project/hf-cache-sync/)
+[![CI](https://github.com/backblaze-labs/hf-cache-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/backblaze-labs/hf-cache-sync/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 > Sync your Hugging Face model cache (`~/.cache/huggingface/hub`) to Backblaze B2 or any S3-compatible object storage, share it across machines and CI runners, and cap local disk usage with LRU eviction.
 
 ## What is hf-cache-sync? A shared Hugging Face cache for ML teams
@@ -61,7 +66,7 @@ refs/<repo>/<ref>                       # ref -> commit hash
 
 Prerequisites:
 - Python >= 3.9
-- A Backblaze B2 bucket (or any S3-compatible store)
+- A [Backblaze B2](https://www.backblaze.com/sign-up/ai-cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=hfcache) bucket (or any S3-compatible store)
 - B2 application key ID and key (or `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` env vars)
 
 ```bash
@@ -92,9 +97,10 @@ pip install hf-cache-sync
 
 ### 2. Create a Backblaze B2 Bucket
 
-1. [Create a bucket](https://www.backblaze.com/docs/cloud-storage-create-and-manage-buckets) (private recommended)
-2. [Create an application key](https://www.backblaze.com/docs/cloud-storage-create-and-manage-app-keys) scoped to that bucket
-3. Note the key ID, the key, and the bucket's Backblaze B2 S3-compatible endpoint (e.g. `https://s3.us-west-000.backblazeb2.com`)
+1. [Sign up for Backblaze B2](https://www.backblaze.com/sign-up/ai-cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=hfcache) — the AI Cloud Storage onboarding flow
+2. [Create a bucket](https://www.backblaze.com/docs/cloud-storage-create-and-manage-buckets) (private recommended)
+3. [Create an application key](https://www.backblaze.com/docs/cloud-storage-create-and-manage-app-keys) scoped to that bucket
+4. Note the key ID, the key, and the bucket's Backblaze B2 S3-compatible endpoint (e.g. `https://s3.us-west-000.backblazeb2.com`)
 
 ### 3. Configure
 
