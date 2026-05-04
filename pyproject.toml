@@ -60,10 +60,10 @@ fallback = ["huggingface_hub>=0.20"]
 watch = ["watchdog>=3.0"]
 
 [project.urls]
-Homepage = "https://github.com/backblaze-b2-samples/hf-cache-sync"
-Source = "https://github.com/backblaze-b2-samples/hf-cache-sync"
-Issues = "https://github.com/backblaze-b2-samples/hf-cache-sync/issues"
-Changelog = "https://github.com/backblaze-b2-samples/hf-cache-sync/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/backblaze-labs/hf-cache-sync"
+Source = "https://github.com/backblaze-labs/hf-cache-sync"
+Issues = "https://github.com/backblaze-labs/hf-cache-sync/issues"
+Changelog = "https://github.com/backblaze-labs/hf-cache-sync/blob/main/CHANGELOG.md"
 
 [project.scripts]
 hf-cache-sync = "hf_cache_sync.cli:cli"

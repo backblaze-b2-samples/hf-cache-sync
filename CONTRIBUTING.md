@@ -5,7 +5,7 @@ Thanks for your interest. Bug reports, fixes, and small features are welcome.
 ## Development setup
 
 ```bash
-git clone https://github.com/<your-org>/hf-cache-sync.git
+git clone https://github.com/backblaze-labs/hf-cache-sync.git
 cd hf-cache-sync
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
