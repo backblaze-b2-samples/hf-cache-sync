@@ -67,9 +67,16 @@ Prerequisites:
 ```bash
 pip install hf-cache-sync
 
+# Option A — env-only (recommended for CI/CD and quick demos):
+cp .env.example .env
+# edit .env with your B2 / S3 settings
+export $(grep -v '^#' .env | xargs)
+
+# Option B — YAML config:
 hf-cache-sync init          # creates .hf-cache-sync.yaml
 # edit .hf-cache-sync.yaml with your bucket details
 
+hf-cache-sync doctor        # confirm config + connectivity
 hf-cache-sync push          # upload local cache to remote
 hf-cache-sync pull mistralai/Mistral-7B-v0.1   # hydrate on another machine
 hf-cache-sync prune --max-gb 50                 # enforce disk budget
@@ -114,18 +121,40 @@ team:
   allow_gated: false
 ```
 
-Alternatively, set credentials via environment variables. B2-named aliases
-take precedence over the AWS ones, so either pair works:
+Or skip the YAML entirely and run from environment variables. A starter
+[`.env.example`](.env.example) lives at the repo root:
 
 ```bash
-# B2-native (preferred when using Backblaze B2)
-export B2_APPLICATION_KEY_ID=<your-b2-key-id>
-export B2_APPLICATION_KEY=<your-b2-key>
-
-# Or AWS-style (works for B2 and any other S3-compatible store)
-export AWS_ACCESS_KEY_ID=<your-b2-key-id>
-export AWS_SECRET_ACCESS_KEY=<your-b2-key>
+cp .env.example .env
+# edit .env with your values
+export $(grep -v '^#' .env | xargs)
 ```
+
+Supported variables:
+
+| Variable                | Purpose                          |
+|-------------------------|----------------------------------|
+| `B2_APPLICATION_KEY_ID` | B2 application key ID            |
+| `B2_APPLICATION_KEY`    | B2 application key (secret)      |
+| `B2_ENDPOINT`           | S3 endpoint URL                  |
+| `B2_BUCKET`             | Bucket name                      |
+| `B2_REGION`             | Bucket region                    |
+| `AWS_ACCESS_KEY_ID`     | AWS-style credential ID fallback |
+| `AWS_SECRET_ACCESS_KEY` | AWS-style credential secret      |
+
+**Precedence (highest first):**
+1. `B2_APPLICATION_KEY_ID` + `B2_APPLICATION_KEY` — credentials
+2. `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` — credentials
+3. YAML `storage.access_key` / `storage.secret_key` — credentials
+4. `B2_ENDPOINT` / `B2_BUCKET` / `B2_REGION` — storage settings (override YAML)
+5. YAML `storage.endpoint` / `storage.bucket` / `storage.region`
+
+Env credentials always override YAML, even when YAML has values set. Each
+credential pair is treated atomically — a partial B2 pair (e.g. only
+`B2_APPLICATION_KEY_ID`) is ignored entirely and the next source is tried.
+
+Run `hf-cache-sync doctor` to see exactly which source was picked
+(`source=b2_env`, `source=aws_env`, or `source=config`).
 
 ### 4. Push Your Local Cache
 

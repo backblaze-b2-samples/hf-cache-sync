@@ -15,7 +15,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
-from hf_cache_sync.config import AppConfig, has_env_credentials
+from hf_cache_sync.config import CRED_SOURCE_NONE, AppConfig
 from hf_cache_sync.storage import StorageBackend, StorageError
 
 console = Console()
@@ -40,7 +40,9 @@ def run_checks(config: AppConfig) -> list[CheckResult]:
     """
     results: list[CheckResult] = []
 
-    results.append(_check_required_fields(config))
+    results.append(_check_endpoint(config))
+    results.append(_check_bucket(config))
+    results.append(_check_region(config))
     results.append(_check_credentials(config))
     results.append(_check_hf_cache_dir(config))
 
@@ -59,8 +61,8 @@ def run_checks(config: AppConfig) -> list[CheckResult]:
             CheckResult(
                 name="Bucket reachable",
                 ok=False,
-                detail="Skipped — storage.bucket is not configured.",
-                hint="Set storage.bucket in your config or run `hf-cache-sync init`.",
+                detail="Skipped — bucket is not configured.",
+                hint="Set storage.bucket in YAML, export B2_BUCKET, or run `hf-cache-sync init`.",
             )
         )
 
@@ -74,30 +76,40 @@ def doctor(config: AppConfig) -> bool:
     return all(r.ok for r in results)
 
 
-def _check_required_fields(config: AppConfig) -> CheckResult:
-    missing: list[str] = []
+def _check_endpoint(config: AppConfig) -> CheckResult:
+    """Surface the resolved endpoint. Informational only — boto3 falls back
+    to the AWS default when unset, and a misconfigured endpoint will be
+    caught by `Bucket reachable` below."""
+    detail = config.storage.endpoint or "(not set, using AWS default)"
+    return CheckResult(name="Endpoint", ok=True, detail=detail)
+
+
+def _check_bucket(config: AppConfig) -> CheckResult:
     if not config.storage.bucket:
-        missing.append("storage.bucket")
-    if not config.storage.region:
-        missing.append("storage.region")
-    if missing:
         return CheckResult(
-            name="Required config fields",
+            name="Bucket",
             ok=False,
-            detail=f"Missing: {', '.join(missing)}",
-            hint="Edit .hf-cache-sync.yaml and fill these in.",
+            detail="Not set",
+            hint="Set storage.bucket in YAML or export B2_BUCKET.",
         )
-    return CheckResult(
-        name="Required config fields",
-        ok=True,
-        detail=f"bucket={config.storage.bucket}, region={config.storage.region}",
-    )
+    return CheckResult(name="Bucket", ok=True, detail=config.storage.bucket)
+
+
+def _check_region(config: AppConfig) -> CheckResult:
+    if not config.storage.region:
+        return CheckResult(
+            name="Region",
+            ok=False,
+            detail="Not set",
+            hint="Set storage.region in YAML or export B2_REGION.",
+        )
+    return CheckResult(name="Region", ok=True, detail=config.storage.region)
 
 
 def _check_credentials(config: AppConfig) -> CheckResult:
-    has_yaml = bool(config.storage.access_key and config.storage.secret_key)
-    has_env = has_env_credentials()
-    if not (has_yaml or has_env):
+    source = config.storage.credentials_source
+    has_creds = bool(config.storage.access_key and config.storage.secret_key)
+    if source == CRED_SOURCE_NONE or not has_creds:
         return CheckResult(
             name="Credentials configured",
             ok=False,
@@ -108,7 +120,6 @@ def _check_credentials(config: AppConfig) -> CheckResult:
                 "AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY)."
             ),
         )
-    source = "config" if has_yaml else "env"
     return CheckResult(name="Credentials configured", ok=True, detail=f"source={source}")
 
 

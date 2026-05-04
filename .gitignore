@@ -42,3 +42,5 @@ coverage.xml
 
 # Project-local
 .hf-cache-sync.yaml
+.env
+.env.local

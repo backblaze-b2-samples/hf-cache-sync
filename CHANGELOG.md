@@ -8,7 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- B2-native env credential aliases: `B2_APPLICATION_KEY_ID` and `B2_APPLICATION_KEY` are now honored everywhere `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` were. B2 aliases take precedence; the pair is treated atomically (no mixing B2 id with AWS secret). Env credentials are now picked up even when no `storage:` block is present in YAML.
+- Full env-driven configuration: `B2_ENDPOINT`, `B2_BUCKET`, `B2_REGION`, `B2_APPLICATION_KEY_ID`, `B2_APPLICATION_KEY` (and AWS-style aliases) can now drive the tool with no YAML required. A `.env.example` file ships at the repo root.
+- Credential source detection: `doctor` now reports the resolved source explicitly (`source=b2_env`, `source=aws_env`, or `source=config`) so users can tell at a glance which credential path was taken.
+- `doctor` output now surfaces resolved Endpoint, Bucket, and Region as separate informational rows.
+
+### Changed
+- Credential precedence is now env-first: B2 env vars > AWS env vars > YAML. Env credentials override YAML even when YAML has values set, so a `.env` file is sufficient for env-only setups (e.g. CI). Storage settings (`B2_ENDPOINT`/`B2_BUCKET`/`B2_REGION`) likewise override their YAML counterparts when set.
+- Each credential pair is treated atomically — a partial pair (e.g. only `B2_APPLICATION_KEY_ID`) is skipped entirely so a B2 id can never silently combine with an AWS secret.
 - `doctor` command — preflight checks for config, credentials, bucket reachability, read/write permission, and HF cache dir presence. Each check runs independently and prints a ✓/✗ summary; non-zero exit on any failure.
 - `diff` command — per-revision comparison of local cache vs remote bucket (in-sync / local-only / remote-only).
 - `list --remote` flag — list repos available in remote storage (single paginator, no manifest body downloads).
