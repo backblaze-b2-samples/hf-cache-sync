@@ -153,8 +153,17 @@ def _wrap_errors(bucket: str, endpoint: str) -> Iterator[None]:
 
 
 class StorageBackend:
-    def __init__(self, config: AppConfig):
+    def __init__(self, config: AppConfig, *, workers: int = 8):
+        """Build a backend sized for ``workers`` concurrent operations.
+
+        ``workers`` controls ``max_pool_connections`` on the underlying
+        boto3 client. With boto3's default of 10, a thread pool of e.g. 16
+        contends on the connection pool and emits urllib3 "Connection pool
+        is full" warnings while requests stall. Sizing the pool to the
+        worker count keeps every thread first-class.
+        """
         self.config = config
+        self.workers = workers
         self.bucket = config.storage.bucket
         self.prefix = config.remote_prefix
         self.endpoint = config.storage.endpoint
@@ -164,10 +173,14 @@ class StorageBackend:
     def client(self) -> S3Client:
         if self._client is None:
             user_agent = get_user_agent(self.config.storage.endpoint)
+            # Floor at boto3's default (10) so commands with low concurrency
+            # (e.g. doctor, diff) keep their existing pool size.
+            pool_size = max(self.workers, 10)
             boto_config = BotoConfig(
                 user_agent_extra=user_agent,
                 # Standard mode covers throttling + transient 5xx with sensible backoff.
                 retries={"max_attempts": 5, "mode": "standard"},
+                max_pool_connections=pool_size,
             )
             kwargs: dict = {
                 "service_name": "s3",

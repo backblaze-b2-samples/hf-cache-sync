@@ -1,12 +1,12 @@
-# hf-cache-sync
+# hf-cache-sync — Hugging Face Cache Sync for Backblaze B2 & S3
 
-> Sync your Hugging Face model cache to Backblaze B2 (or any S3-compatible store), share it across machines, and keep local disk usage under control with LRU eviction.
+> Sync your Hugging Face model cache (`~/.cache/huggingface/hub`) to Backblaze B2 or any S3-compatible object storage, share it across machines and CI runners, and cap local disk usage with LRU eviction.
 
-## What Is hf-cache-sync?
+## What is hf-cache-sync? A shared Hugging Face cache for ML teams
 
-hf-cache-sync is a CLI tool that syncs the local Hugging Face hub cache (`~/.cache/huggingface/hub`) to S3-compatible object storage. It is built for ML teams and CI pipelines that waste bandwidth and disk re-downloading the same 5-30 GB models on every machine.
+`hf-cache-sync` is a CLI that turns the local Hugging Face Hub cache into a two-tier cache: local disk plus a shared remote bucket on Backblaze B2 (or any S3-compatible store such as AWS S3 or Cloudflare R2). One machine downloads a model from the Hugging Face Hub, pushes the content-addressed blobs and revision manifests to the bucket, and every other machine — workstation, GPU cluster node, or CI runner — hydrates from the bucket instead of re-downloading from the Hub.
 
-It works as a two-tier cache: local disk + a shared remote bucket. One machine downloads a model, pushes the blobs to the bucket, and every other machine hydrates from there instead of pulling from the Hub again.
+Built for ML teams and CI/CD pipelines that waste bandwidth and disk re-fetching the same 5–30 GB transformer, diffusion, or LLM weights on every machine.
 
 ### Problem
 
@@ -16,14 +16,14 @@ Hugging Face models and datasets are cached locally. Disks fill up fast, teams r
 
 hf-cache-sync uploads content-addressed blobs and revision manifests to a Backblaze B2 bucket (or any S3-compatible store). Other machines pull from the bucket to reconstruct the local cache. An LRU prune command enforces a local disk budget by evicting old revisions.
 
-### Who Should Use This
+### Who is hf-cache-sync for?
 
-- ML teams (5-50 engineers) sharing models across workstations
-- CI/CD pipelines that repeatedly download the same model weights
-- GPU cluster operators preloading models across nodes
-- Anyone hitting disk limits from accumulated HF cache
+- ML teams (5–50 engineers) sharing Hugging Face models across workstations
+- CI/CD pipelines that repeatedly download the same model weights from the Hub
+- GPU cluster operators preloading models across training/inference nodes
+- Solo developers hitting local disk limits from accumulated `~/.cache/huggingface` data
 
-## Key Features
+## Key features
 
 - **Push** — Upload local cache blobs, manifests, and refs to remote storage. Content-addressed by SHA-256; existing blobs are skipped.
 - **Pull** — Hydrate local cache from remote. Downloads blobs, reconstructs snapshot directories with symlinks. Hash-verified on download.
@@ -43,7 +43,7 @@ hf-cache-sync uploads content-addressed blobs and revision manifests to a Backbl
 |-----------|-------------|------|
 | CLI | Click-based command interface | `src/hf_cache_sync/cli.py` |
 | Cache scanner | Reads local HF hub cache structure (blobs, snapshots, refs) | `src/hf_cache_sync/cache.py` |
-| Storage backend | S3-compatible client via boto3. Sets `b2ai-hfcache` user-agent for B2 endpoints. | `src/hf_cache_sync/storage.py` |
+| Storage backend | Backblaze B2 / S3-compatible client via boto3. Sets `b2ai-hfcache` user-agent for B2 endpoints. | `src/hf_cache_sync/storage.py` |
 | Manifest | JSON manifest per repo/revision mapping files to blob hashes | `src/hf_cache_sync/manifest.py` |
 | Push | Uploads missing blobs + manifests + refs | `src/hf_cache_sync/push.py` |
 | Pull | Downloads blobs, reconstructs snapshots | `src/hf_cache_sync/pull.py` |
@@ -69,7 +69,7 @@ pip install hf-cache-sync
 
 # Option A — env-only (recommended for CI/CD and quick demos):
 cp .env.example .env
-# edit .env with your B2 / S3 settings
+# edit .env with your Backblaze B2 / S3 settings
 export $(grep -v '^#' .env | xargs)
 
 # Option B — YAML config:
@@ -94,7 +94,7 @@ pip install hf-cache-sync
 
 1. [Create a bucket](https://www.backblaze.com/docs/cloud-storage-create-and-manage-buckets) (private recommended)
 2. [Create an application key](https://www.backblaze.com/docs/cloud-storage-create-and-manage-app-keys) scoped to that bucket
-3. Note the key ID, the key, and the bucket's S3 endpoint (e.g. `https://s3.us-west-000.backblazeb2.com`)
+3. Note the key ID, the key, and the bucket's Backblaze B2 S3-compatible endpoint (e.g. `https://s3.us-west-000.backblazeb2.com`)
 
 ### 3. Configure
 
@@ -136,7 +136,7 @@ Supported variables:
 |-------------------------|----------------------------------|
 | `B2_APPLICATION_KEY_ID` | B2 application key ID            |
 | `B2_APPLICATION_KEY`    | B2 application key (secret)      |
-| `B2_ENDPOINT`           | S3 endpoint URL                  |
+| `B2_ENDPOINT`           | Backblaze B2 / S3 endpoint URL   |
 | `B2_BUCKET`             | Bucket name                      |
 | `B2_REGION`             | Bucket region                    |
 | `AWS_ACCESS_KEY_ID`     | AWS-style credential ID fallback |
@@ -179,7 +179,7 @@ hf-cache-sync prune --max-gb 50
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `storage.endpoint` | S3-compatible endpoint URL | — | Yes |
+| `storage.endpoint` | Backblaze B2 / S3-compatible endpoint URL | — | Yes |
 | `storage.bucket` | Bucket name | — | Yes |
 | `storage.region` | Bucket region | — | Yes |
 | `storage.access_key` | Access key (or `AWS_ACCESS_KEY_ID` env) | — | Yes |

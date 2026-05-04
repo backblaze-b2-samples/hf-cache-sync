@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI errors now exit non-zero via `click.ClickException` so CI catches failures.
 - `__version__` is sourced from installed package metadata.
 - Storage backend now uses standard boto retry mode (`max_attempts=5`).
+- `push` and `pull` now size the boto3 connection pool to the requested `--workers`. With the prior default of 10, a 16-worker pool spent time blocked on the connection pool and emitted urllib3 "Connection pool is full" warnings. The pool is floored at boto3's default of 10 so commands with low concurrency (`doctor`, `diff`) keep their existing behavior.
 
 ### Fixed
 - `pull` no longer swallows credential / network errors as "manifest not found"; `ClientError` is narrowed and surfaced.

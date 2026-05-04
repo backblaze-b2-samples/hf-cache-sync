@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "hf-cache-sync"
 version = "0.1.0"
-description = "Shared Hugging Face Cache Manager with S3 Backend and LRU Eviction"
+description = "Shared Hugging Face Cache Manager backed by Backblaze B2 (or any S3-compatible store) with LRU eviction"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"

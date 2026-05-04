@@ -3,9 +3,11 @@
 import pytest
 from botocore.exceptions import ClientError, EndpointConnectionError
 
+from hf_cache_sync.config import AppConfig, StorageConfig
 from hf_cache_sync.storage import (
     B2_USER_AGENT,
     DEFAULT_USER_AGENT,
+    StorageBackend,
     StorageError,
     _humanize_client_error,
     _humanize_endpoint_error,
@@ -85,3 +87,31 @@ def test_storage_error_chain_preserves_cause():
         raise _humanize_client_error(inner, bucket="b", endpoint="") from inner
     except StorageError as caught:
         assert caught.__cause__ is inner
+
+
+def _backend(workers: int) -> StorageBackend:
+    return StorageBackend(AppConfig(storage=StorageConfig(bucket="b", region="r")), workers=workers)
+
+
+@pytest.mark.parametrize(
+    "workers,expected_pool",
+    [
+        (1, 10),  # below boto3 default — keep boto3's default of 10
+        (8, 10),  # CLI default — unchanged from prior behavior
+        (10, 10),  # exactly the floor
+        (16, 16),  # above default — pool grows to fit
+        (32, 32),  # high concurrency
+    ],
+)
+def test_max_pool_connections_scales_with_workers(workers, expected_pool):
+    """boto3's default pool of 10 stalls thread pools larger than that.
+    Backend must size max_pool_connections >= workers (with a 10 floor)."""
+    backend = _backend(workers)
+    assert backend.client.meta.config.max_pool_connections == expected_pool
+
+
+def test_default_workers_keeps_boto_default_pool():
+    """Backends constructed without an explicit workers (doctor, diff)
+    should keep boto3's default pool size to avoid surprising behavior."""
+    backend = StorageBackend(AppConfig(storage=StorageConfig(bucket="b", region="r")))
+    assert backend.client.meta.config.max_pool_connections == 10

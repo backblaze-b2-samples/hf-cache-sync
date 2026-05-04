@@ -68,7 +68,7 @@ def _pull_native(
     dry_run: bool,
     workers: int,
 ) -> None:
-    backend = StorageBackend(config)
+    backend = StorageBackend(config, workers=workers)
     resolved_from_ref = False
 
     # Resolve revision from ref if not given.
@@ -184,6 +184,9 @@ def pull_all(
     """
     import fnmatch
 
+    # pull-all only uses this backend for the initial refs/ listing on the
+    # main thread; per-repo pulls inside the loop construct their own
+    # backend sized to ``workers``.
     backend = StorageBackend(config)
     ref_keys = [k for k in backend.list_keys("refs/") if k.endswith("/main")]
 

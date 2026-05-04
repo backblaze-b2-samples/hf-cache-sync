@@ -32,7 +32,7 @@ def push(config: AppConfig, *, dry_run: bool = False, workers: int = 8) -> None:
         console.print("[yellow]No cached repos found.[/yellow]")
         return
 
-    backend = StorageBackend(config)
+    backend = StorageBackend(config, workers=workers)
 
     # One LIST instead of N HEAD: we know up front which blobs are already remote.
     # Race note: a concurrent pusher may upload an overlapping blob after this
