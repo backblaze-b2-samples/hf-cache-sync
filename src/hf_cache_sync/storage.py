@@ -103,7 +103,8 @@ def _humanize_client_error(err: ClientError, *, bucket: str, endpoint: str) -> S
     if code in ("InvalidAccessKeyId", "SignatureDoesNotMatch"):
         msg = (
             "S3 credentials rejected. Check `storage.access_key` / `storage.secret_key` "
-            "in your config, or the AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY env vars."
+            "in your config, or the B2_APPLICATION_KEY_ID / B2_APPLICATION_KEY "
+            "(or AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY) env vars."
         )
     elif code == "AccessDenied":
         msg = (

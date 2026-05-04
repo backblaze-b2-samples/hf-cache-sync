@@ -8,7 +8,6 @@ index).
 
 from __future__ import annotations
 
-import os
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,7 +15,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
-from hf_cache_sync.config import AppConfig
+from hf_cache_sync.config import AppConfig, has_env_credentials
 from hf_cache_sync.storage import StorageBackend, StorageError
 
 console = Console()
@@ -97,15 +96,16 @@ def _check_required_fields(config: AppConfig) -> CheckResult:
 
 def _check_credentials(config: AppConfig) -> CheckResult:
     has_yaml = bool(config.storage.access_key and config.storage.secret_key)
-    has_env = bool(os.environ.get("AWS_ACCESS_KEY_ID") and os.environ.get("AWS_SECRET_ACCESS_KEY"))
+    has_env = has_env_credentials()
     if not (has_yaml or has_env):
         return CheckResult(
             name="Credentials configured",
             ok=False,
             detail="No access_key/secret_key found in config or env.",
             hint=(
-                "Set storage.access_key/secret_key in your config OR "
-                "export AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY."
+                "Set storage.access_key/secret_key in your config OR export "
+                "B2_APPLICATION_KEY_ID/B2_APPLICATION_KEY (or "
+                "AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY)."
             ),
         )
     source = "config" if has_yaml else "env"

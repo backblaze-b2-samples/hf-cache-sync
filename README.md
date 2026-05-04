@@ -114,9 +114,15 @@ team:
   allow_gated: false
 ```
 
-Alternatively, set credentials via environment variables:
+Alternatively, set credentials via environment variables. B2-named aliases
+take precedence over the AWS ones, so either pair works:
 
 ```bash
+# B2-native (preferred when using Backblaze B2)
+export B2_APPLICATION_KEY_ID=<your-b2-key-id>
+export B2_APPLICATION_KEY=<your-b2-key>
+
+# Or AWS-style (works for B2 and any other S3-compatible store)
 export AWS_ACCESS_KEY_ID=<your-b2-key-id>
 export AWS_SECRET_ACCESS_KEY=<your-b2-key>
 ```
@@ -227,7 +233,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and small features are welco
 | Symptom | Fix |
 |---------|-----|
 | `hf-cache-sync push` uploads nothing | Verify HF cache exists at `~/.cache/huggingface/hub` and contains model directories |
-| Authentication errors on push/pull | Check `access_key` / `secret_key` in config or `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` env vars |
+| Authentication errors on push/pull | Check `access_key` / `secret_key` in config, or `B2_APPLICATION_KEY_ID` / `B2_APPLICATION_KEY` (or `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`) env vars |
 | Hash mismatch on pull | Blob was corrupted in transit or storage. Delete the remote blob and re-push from a known-good machine. |
 | Prune removes nothing | All revisions are pointed to by active refs. Detached revisions are evicted first. |
 | Windows symlink errors | hf-cache-sync falls back to hardlinks, then file copies automatically. No action needed. |
@@ -245,8 +251,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and small features are welco
 - Use B2 application keys scoped to a single bucket. Create separate read-only
   keys for distribution; restrict write keys to CI runners.
 - Never commit `.hf-cache-sync.yaml` with credentials — `.gitignore` excludes
-  it by default. Prefer `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` env vars
-  in CI.
+  it by default. Prefer `B2_APPLICATION_KEY_ID` / `B2_APPLICATION_KEY` (or
+  `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`) env vars in CI.
 
 ## License
 

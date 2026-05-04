@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- B2-native env credential aliases: `B2_APPLICATION_KEY_ID` and `B2_APPLICATION_KEY` are now honored everywhere `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` were. B2 aliases take precedence; the pair is treated atomically (no mixing B2 id with AWS secret). Env credentials are now picked up even when no `storage:` block is present in YAML.
 - `doctor` command — preflight checks for config, credentials, bucket reachability, read/write permission, and HF cache dir presence. Each check runs independently and prints a ✓/✗ summary; non-zero exit on any failure.
 - `diff` command — per-revision comparison of local cache vs remote bucket (in-sync / local-only / remote-only).
 - `list --remote` flag — list repos available in remote storage (single paginator, no manifest body downloads).

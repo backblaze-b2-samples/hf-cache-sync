@@ -25,6 +25,28 @@ def _default_config_paths() -> list[Path]:
     ]
 
 
+def _credentials_from_env() -> tuple[str, str]:
+    """Resolve (access_key, secret_key) from env, preferring B2 aliases.
+
+    Treats each pair atomically — never mixes a B2 id with an AWS secret —
+    because the two sets typically belong to different accounts.
+    """
+    if (b2_id := os.environ.get("B2_APPLICATION_KEY_ID")) and (
+        b2_key := os.environ.get("B2_APPLICATION_KEY")
+    ):
+        return b2_id, b2_key
+    return (
+        os.environ.get("AWS_ACCESS_KEY_ID", ""),
+        os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
+    )
+
+
+def has_env_credentials() -> bool:
+    """True iff a complete credential pair is available via env vars."""
+    access, secret = _credentials_from_env()
+    return bool(access and secret)
+
+
 @dataclass
 class StorageConfig:
     endpoint: str = ""
@@ -65,26 +87,41 @@ class AppConfig:
 
 
 def load_config(path: Path | None = None) -> AppConfig:
-    """Load config from YAML file. Returns defaults if no file found."""
+    """Load config from YAML file. Returns defaults if no file found.
+
+    Credentials missing from YAML are filled from env (B2_APPLICATION_KEY_ID /
+    B2_APPLICATION_KEY take precedence over AWS_ACCESS_KEY_ID /
+    AWS_SECRET_ACCESS_KEY) so an env-only setup works without a storage block.
+    """
     if path and path.exists():
-        return _parse_config(path)
-    for p in _default_config_paths():
-        if p.exists():
-            return _parse_config(p)
-    return AppConfig()
+        cfg = _parse_config(path)
+    else:
+        cfg = AppConfig()
+        for p in _default_config_paths():
+            if p.exists():
+                cfg = _parse_config(p)
+                break
+
+    if not (cfg.storage.access_key and cfg.storage.secret_key):
+        env_access, env_secret = _credentials_from_env()
+        if env_access and env_secret:
+            cfg.storage.access_key = cfg.storage.access_key or env_access
+            cfg.storage.secret_key = cfg.storage.secret_key or env_secret
+    return cfg
 
 
 def _parse_config(path: Path) -> AppConfig:
     raw = yaml.safe_load(path.read_text()) or {}
     cfg = AppConfig()
+    env_access, env_secret = _credentials_from_env()
 
     if s := raw.get("storage"):
         cfg.storage = StorageConfig(
             endpoint=s.get("endpoint", ""),
             bucket=s.get("bucket", ""),
             region=s.get("region", ""),
-            access_key=s.get("access_key", os.environ.get("AWS_ACCESS_KEY_ID", "")),
-            secret_key=s.get("secret_key", os.environ.get("AWS_SECRET_ACCESS_KEY", "")),
+            access_key=s.get("access_key", env_access),
+            secret_key=s.get("secret_key", env_secret),
         )
 
     if c := raw.get("cache"):

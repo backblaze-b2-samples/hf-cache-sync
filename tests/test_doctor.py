@@ -56,9 +56,18 @@ def test_doctor_missing_bucket_field_skips_network_checks(cache_dir):
     assert "Skipped" in by_name["Bucket reachable"].detail
 
 
+def _clear_cred_env(monkeypatch):
+    for var in (
+        "B2_APPLICATION_KEY_ID",
+        "B2_APPLICATION_KEY",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+
 def test_doctor_missing_credentials(cache_dir, monkeypatch):
-    monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
-    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+    _clear_cred_env(monkeypatch)
     config = AppConfig(
         storage=StorageConfig(bucket=BUCKET, region=REGION),
         cache=CacheConfig(hf_cache_dir=str(cache_dir)),
@@ -69,8 +78,24 @@ def test_doctor_missing_credentials(cache_dir, monkeypatch):
 
 
 def test_doctor_credentials_from_env(cache_dir, monkeypatch):
+    _clear_cred_env(monkeypatch)
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "envak")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "envsk")
+    config = AppConfig(
+        storage=StorageConfig(bucket=BUCKET, region=REGION),
+        cache=CacheConfig(hf_cache_dir=str(cache_dir)),
+    )
+    results = run_checks(config)
+    creds = next(r for r in results if r.name == "Credentials configured")
+    assert creds.ok is True
+    assert "env" in creds.detail
+
+
+def test_doctor_credentials_from_b2_env(cache_dir, monkeypatch):
+    """B2_APPLICATION_KEY_ID / B2_APPLICATION_KEY satisfy the credential check."""
+    _clear_cred_env(monkeypatch)
+    monkeypatch.setenv("B2_APPLICATION_KEY_ID", "b2-id")
+    monkeypatch.setenv("B2_APPLICATION_KEY", "b2-secret")
     config = AppConfig(
         storage=StorageConfig(bucket=BUCKET, region=REGION),
         cache=CacheConfig(hf_cache_dir=str(cache_dir)),
@@ -151,8 +176,7 @@ def test_doctor_cli_exits_nonzero_on_failure(tmp_path, monkeypatch):
 
     from hf_cache_sync.cli import cli
 
-    monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
-    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+    _clear_cred_env(monkeypatch)
 
     cfg_path = tmp_path / ".hf-cache-sync.yaml"
     cfg_path.write_text(f"""\
